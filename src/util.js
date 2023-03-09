@@ -9,3 +9,7 @@ export function isSorted(list) {
 export function one_to_n(n) {
     return [...Array(n).keys()].map(n => n + 1);
 }
+
+export function ping_pong(x, max) {
+    return (x % (2 * max)) - 2 * (x % max) * (Math.floor(x / max) % 2)
+}

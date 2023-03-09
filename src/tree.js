@@ -2,9 +2,10 @@ import { isSorted, randomInt } from "./util";
 
 export class BinaryTree {
     static fromPivotFunc(inorder = [], pivot) {
-        if (inorder.length === 0) return null;
+        // console.log(inorder);
+        if (inorder.length === 0) return new BTNodeNull();
         const rootIdx = pivot(inorder);
-        return new BinaryTreeNode(
+        return new BTNode(
             inorder[rootIdx],
             this.fromPivotFunc(inorder.slice(0, rootIdx), pivot),
             this.fromPivotFunc(inorder.slice(rootIdx + 1), pivot)
@@ -16,63 +17,108 @@ export class BinaryTree {
         return this.fromPivotFunc(inorder, i => Math.floor(i.length / 2));
     }
 
+
     static randomFromInorder(inorder) {
         // To ensure an okay-ish tree, choose a pivot in the middle half
         const pivot = i => { 
             if (i.length === 2) return randomInt(2);
             return randomInt(Math.floor(i.length / 2)) + Math.floor(i.length / 4);
         }
-        return this.fromPivotFunc(inorder, pivot)
+        return this.fromPivotFunc(inorder, pivot);
     }
 }
 
-export class BinaryTreeNode {
-    constructor(val, left = null, right = null) {
+// Abstract
+export class BTNodeBase {
+    constructor() {
+        if (this.constructor === BTNodeBase) {
+            throw new Error("BTNodeBase is abstract.");
+        }
+    }
+
+
+}
+
+class BTNode extends BTNodeBase {
+    constructor(val, left = new BTNodeNull(), right = new BTNodeNull()) {
+        super();
         this.val = val;
         this.left = left;
         this.right = right;
-
-        // Positional information, invalidated upon modification
-        this.layer = null;
-        this.offset = null;
-        this.width = null;
     }
 
     toString() {
-        let l = this.left ? this.left.toString() : '';
-        let r = this.right ? this.right.toString() : '';
-        return `(${this.val} ${l} ${r})`;
+        return `(${this.val} ${this.left.toString()} ${this.right.toString()})`;
     }
 
     inorder() {
-        let l = this.left ? this.left.inorder() : [];
-        let r = this.right ? this.right.inorder() : [];
-        return [...l, this.val, ...r];
+        return [...this.left.indorder(), this.val, ...this.right.indorder()];
     }
 
     preorder() {
-        let l = this.left ? this.left.preorder() : [];
-        let r = this.right ? this.right.preorder() : [];
-        return [this.val, ...l, ...r];
+        return [this.val, ...this.left.preorder(), ...this.right.preorder()];
     }
 
     asList() {
-        let l = this.left ? this.left.asList() : [];
-        let r = this.right ? this.right.asList() : [];
-        return [this, ...l, ...r];
+        return [this, ...this.left.asList(), ...this.right.asList()]
     }
 
     isBST() {
         return isSorted(this.inorder());
     }
 
+    rotRight() {
+        let newRight = new BTNode(this.val, this.left.right, this.right);
+        
+        this.val = this.left.val;
+        this.left = this.left.left;
+        this.right = newRight;
+    }
+
+    rotLeft() {
+        let newLeft = new BTNode(this.val, this.left, this.right.left);
+
+        this.val = this.right.val;
+        this.right = this.right.right;
+        this.left = newLeft;
+    }
+
+    
+    height() {
+        return 1 + Math.max(this.left.height(), this.right.height());
+    }
+
     find(key, bst = true) {
         if (key === this.val) return this;
         if (bst) {
-            if (key < this.val) return this.left ? this.left.find(key) : null;
-            if (key > this.val) return this.right ? this.right.find(key) : null;
+            if (key < this.val) return this.left.find(key);
+            if (key > this.val) return this.right.find(key);
+        } else {
+            let left = this.left.find(key);
+            return left instanceof BTNodeNull
+                ? this.right.find(key)
+                : left;
         }
-        return this.left ? this.left.find(key) : null || this.right ? this.right.find(key) : null;
+    }
+
+    copy() {
+        return new BTNode(
+            this.val,
+            this.left.copy(),
+            this.right.copy()
+        )
+    }
+
+    hasLeftChild() {
+        return this.left instanceof BTNode;
+    }
+
+    hasRightChild() {
+        return this.right instanceof BTNode;
+    }
+
+    isLeaf() {
+        return (this.left instanceof BTNodeNull) && (this.right instanceof BTNodeNull);
     }
 
     // Must be called on root
@@ -80,26 +126,17 @@ export class BinaryTreeNode {
         this.layer = depth;
         this.offset = offset;
         
-        if (this.left) {
-            this.left.annotatePositions(depth + 1, this.offset);
-        }
-        if (this.right) { 
-            this.right.annotatePositions(depth + 1, this.offset + (this.left ? this.left.width : 1));
-            // this.right.annotatePositions(depth + 1, this.offset + (this.left ? this.left.width : this.width / 2));
-        }
+        this.left.annotatePositions(depth + 1, this.offset);
+        this.right.annotatePositions(depth + 1, this.offset + (this.hasLeftChild() ? this.left.width : 1));
         
-        if (!this.left && !this.right) this.width = 1;
-        else if (this.left && this.right) this.width = this.left.width + this.right.width;
-        else if (this.left) this.width = 1 + this.left.width;
-        else this.width = 1 + this.right.width;
+        if (this.isLeaf()) this.width = 1;
+        else if (this.hasLeftChild() && this.hasRightChild()) this.width = this.left.width + this.right.width;
+        else this.width = 1 + this.left.width + this.right.width;
     }
 
-    height() {
-        let l = this.left ? this.left.height() : -1;
-        let r = this.right ? this.right.height() : -1;
-        return 1 + Math.max(l, r);
+    orNull() {
+        return this;
     }
-
 
     asLayers() {
         let height = this.height();
@@ -112,12 +149,59 @@ export class BinaryTreeNode {
                     layers[i + 1].push(null);
                     layers[i + 1].push(null);
                 } else {
-                    layers[i + 1].push(node.left);
-                    layers[i + 1].push(node.right);
+                    layers[i + 1].push(node.left.orNull());
+                    layers[i + 1].push(node.right.orNull());
                 }
             }
         }
 
         return layers
+    }
+}
+
+class BTNodeNull extends BTNodeBase {
+    constructor() {
+        super();
+        this.width = 0;
+    }
+
+    toString() {
+        return '';
+    }
+
+    inorder() {
+        return [];
+    }
+
+    preorder() {
+        return [];
+    }
+
+    asList() {
+        return []
+    }
+
+    isBST() {
+        return true;
+    }
+    
+    height() {
+        return -1;
+    }
+
+    find() {
+        return new BTNodeNull();
+    }
+
+    copy() {
+        return new BTNodeNull();
+    }
+
+    annotatePositions() {
+        // Nothing
+    }
+
+    orNull() {
+        return null;
     }
 }
